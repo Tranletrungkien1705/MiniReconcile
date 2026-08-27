@@ -1,0 +1,61 @@
+@model Statement
+@{ ViewData["Title"] = $"Đối soát {Model.No}"; var lines = (List<LedgerEntry>)ViewBag.Lines; var (stt, css) = Ui.Stmt(Model.Status); }
+<div class="row g-3">
+    <div class="col-lg-8"><div class="card"><div class="card-body">
+        <div class="d-flex justify-content-between align-items-start mb-3">
+            <div><h5 class="fw-bold mb-1">@Model.No <span class="badge bg-@css ms-1">@stt</span></h5>
+                <div class="text-muted small">@Model.Partner?.Name (@Model.Partner?.Code) · kỳ @Model.FromDate.ToString("dd/MM/yyyy") – @Model.ToDate.ToString("dd/MM/yyyy")</div>
+                @if (Model.ConfirmedAt != null) { <div class="small text-success">Xác nhận @Model.ConfirmedAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</div> }
+            </div>
+        </div>
+        <div class="row g-2 text-center mb-3">
+            <div class="col"><div class="text-muted small">Dư đầu kỳ</div><div class="fw-bold">@Ui.Money(Model.OpeningBalance)</div></div>
+            <div class="col"><div class="text-muted small">PS Ghi nợ</div><div class="fw-bold text-danger">@Ui.Money(Model.TotalDebit)</div></div>
+            <div class="col"><div class="text-muted small">PS Thanh toán</div><div class="fw-bold text-success">@Ui.Money(Model.TotalCredit)</div></div>
+            <div class="col"><div class="text-muted small">Dư cuối kỳ</div><div class="fw-bold" style="color:#0f766e">@Ui.Money(Model.ClosingBalance)</div></div>
+        </div>
+        @if (Model.Status == StatementStatus.Disputed && !string.IsNullOrEmpty(Model.DisputeNote)) { <div class="alert alert-danger small"><b>Khiếu nại:</b> @Model.DisputeNote</div> }
+        <table class="table table-sm align-middle">
+            <thead><tr><th>Ngày</th><th>Chứng từ</th><th>Diễn giải</th><th class="text-end">Ghi nợ</th><th class="text-end">Thanh toán</th></tr></thead>
+            <tbody>
+            @foreach (var e in lines)
+            {
+                <tr><td class="small">@e.EntryDate.ToString("dd/MM/yy")</td><td class="small fw-semibold">@e.DocNo</td><td class="small text-muted">@e.Note</td>
+                    <td class="text-end text-danger">@(e.Type == LedgerType.Debit ? Ui.Money(e.Amount) : "")</td>
+                    <td class="text-end text-success">@(e.Type == LedgerType.Credit ? Ui.Money(e.Amount) : "")</td></tr>
+            }
+            </tbody>
+        </table>
+        <a href="/Statement" class="btn btn-outline-secondary btn-sm">← Danh sách</a>
+    </div></div></div>
+    <div class="col-lg-4"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-3">Luồng xử lý</h6>
+        <div class="d-flex flex-column gap-2">
+            @if (Model.Status == StatementStatus.Draft)
+            {
+                <form asp-action="SetStatus" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="status" value="1" /><button class="btn btn-primary w-100"><i class="bi bi-send me-1"></i>Gửi đối tác</button></form>
+            }
+            else if (Model.Status == StatementStatus.Sent || Model.Status == StatementStatus.Disputed)
+            {
+                <form asp-action="SetStatus" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="status" value="2" /><button class="btn btn-success w-100"><i class="bi bi-check-circle me-1"></i>Đối tác xác nhận</button></form>
+                @if (Model.Status == StatementStatus.Sent)
+                {
+                    <form asp-action="SetStatus" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="status" value="3" />
+                        <input name="note" class="form-control form-control-sm mb-2" placeholder="Lý do khiếu nại" />
+                        <button class="btn btn-outline-danger w-100"><i class="bi bi-exclamation-triangle me-1"></i>Khiếu nại</button></form>
+                }
+                @if (Model.Status == StatementStatus.Disputed)
+                {
+                    <form asp-action="SetStatus" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="status" value="4" /><button class="btn btn-outline-dark w-100">Chốt (đóng)</button></form>
+                }
+            }
+            else if (Model.Status == StatementStatus.Confirmed)
+            {
+                <form asp-action="SetStatus" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" /><input type="hidden" name="status" value="4" /><button class="btn btn-dark w-100"><i class="bi bi-lock me-1"></i>Chốt (đóng)</button></form>
+            }
+            else { <div class="text-muted small">Đã chốt — không còn thao tác.</div> }
+        </div>
+        <hr />
+        <div class="small text-muted">Draft → Sent → Confirmed/Disputed → Closed. Các dòng trong bảng đã được đóng băng, không bị đối soát lại.</div>
+    </div></div></div>
+</div>

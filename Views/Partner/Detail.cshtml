@@ -1,0 +1,58 @@
+@model Partner
+@{ ViewData["Title"] = $"Đối tác {Model.Code}"; var ledger = (List<LedgerEntry>)ViewBag.Ledger; var bal = (decimal)ViewBag.Balance; var ag = (Aging)ViewBag.Aging; }
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card mb-3"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-start">
+                <div><h5 class="fw-bold mb-1">@Model.Name</h5><div class="text-muted small">@Model.Code · @Model.Phone @(Model.Email != null ? "· " + Model.Email : "")</div></div>
+                <div class="text-end"><div class="text-muted small">Số dư công nợ</div><div class="stat-num @(bal>0?"text-danger":bal<0?"text-success":"")">@Ui.Money(bal)</div></div>
+            </div>
+            <div class="row g-2 mt-2 small">
+                @foreach (var b in ag.Buckets())
+                {
+                    <div class="col"><div class="text-muted">@b.Label</div><div class="fw-semibold @(b.Label==">90 ngày" && b.Amount>0 ? "text-danger":"")">@Ui.Money(b.Amount)</div></div>
+                }
+            </div>
+        </div></div>
+        <div class="card"><div class="card-body">
+            <h6 class="fw-bold mb-2">Sổ công nợ</h6>
+            <table class="table table-sm align-middle">
+                <thead><tr><th>Ngày</th><th>Chứng từ</th><th>Diễn giải</th><th class="text-end">Ghi nợ</th><th class="text-end">Thanh toán</th><th class="text-end">Lũy kế</th></tr></thead>
+                <tbody>
+                @{ var run = Model.OpeningBalance; }
+                @if (Model.OpeningBalance != 0) { <tr class="table-light"><td colspan="5" class="small text-muted">Dư nợ đầu kỳ</td><td class="text-end fw-semibold">@Ui.Money(run)</td></tr> }
+                @foreach (var e in ledger)
+                {
+                    run += e.Signed;
+                    <tr>
+                        <td class="small">@e.EntryDate.ToString("dd/MM/yy")</td>
+                        <td class="small fw-semibold">@e.DocNo@if (e.StatementId != null) { <i class="bi bi-lock-fill text-muted ms-1" title="Đã đối soát"></i> }</td>
+                        <td class="small text-muted">@e.Note</td>
+                        <td class="text-end text-danger">@(e.Type == LedgerType.Debit ? Ui.Money(e.Amount) : "")</td>
+                        <td class="text-end text-success">@(e.Type == LedgerType.Credit ? Ui.Money(e.Amount) : "")</td>
+                        <td class="text-end">@Ui.Money(run)</td>
+                    </tr>
+                }
+                @if (ledger.Count == 0 && Model.OpeningBalance == 0) { <tr><td colspan="6" class="text-center text-muted py-3">Chưa có phát sinh.</td></tr> }
+                </tbody>
+            </table>
+        </div></div>
+    </div>
+    <div class="col-lg-4"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-3">Ghi phát sinh</h6>
+        <form asp-action="AddEntry" method="post">@Html.AntiForgeryToken()<input type="hidden" name="id" value="@Model.Id" />
+            <div class="mb-2"><label class="form-label small text-muted">Loại</label>
+                <select name="type" class="form-select" id="type" onchange="document.getElementById('dueWrap').style.display = this.value=='0'?'block':'none'">
+                    <option value="0">Ghi nợ (hóa đơn)</option><option value="1">Thanh toán</option></select></div>
+            <div class="row g-2 mb-2">
+                <div class="col-7"><input name="docNo" class="form-control form-control-sm" placeholder="Số chứng từ" /></div>
+                <div class="col-5"><input name="entryDate" type="date" value="@DateTime.Today.ToString("yyyy-MM-dd")" class="form-control form-control-sm" /></div>
+            </div>
+            <div class="mb-2"><input name="amount" type="number" step="1000000" class="form-control" placeholder="Số tiền *" required /></div>
+            <div class="mb-2" id="dueWrap"><label class="form-label small text-muted">Hạn thanh toán</label><input name="dueDate" type="date" class="form-control form-control-sm" /></div>
+            <div class="mb-3"><input name="note" class="form-control form-control-sm" placeholder="Diễn giải" /></div>
+            <button class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>Ghi sổ</button>
+        </form>
+        <a href="/Statement/Create?partnerId=@Model.Id" class="btn btn-outline-primary w-100 mt-2">Lập bảng đối soát</a>
+    </div></div></div>
+</div>

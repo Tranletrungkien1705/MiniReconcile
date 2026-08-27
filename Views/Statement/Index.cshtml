@@ -1,0 +1,34 @@
+@model List<Statement>
+@{ ViewData["Title"] = "Bảng đối soát"; var st = (StatementStatus?)ViewBag.Status; }
+<div class="card"><div class="card-body">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="/Statement" class="btn btn-sm @(st==null?"btn-primary":"btn-outline-primary")">Tất cả</a>
+            @foreach (StatementStatus s in Enum.GetValues(typeof(StatementStatus)))
+            {
+                var (t, _) = Ui.Stmt(s);
+                <a href="/Statement?status=@((int)s)" class="btn btn-sm @(st==s?"btn-primary":"btn-outline-primary")">@t</a>
+            }
+        </div>
+        <a href="/Statement/Create" class="btn btn-sm btn-primary"><i class="bi bi-file-earmark-plus me-1"></i>Lập mới</a>
+    </div>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Số</th><th>Đối tác</th><th>Kỳ</th><th class="text-end">Đầu kỳ</th><th class="text-end">PS Nợ</th><th class="text-end">PS Có</th><th class="text-end">Cuối kỳ</th><th>Trạng thái</th></tr></thead>
+        <tbody>
+        @foreach (var s in Model)
+        {
+            var (t, css) = Ui.Stmt(s.Status);
+            <tr style="cursor:pointer" onclick="location.href='/Statement/Detail/@s.Id'">
+                <td class="fw-semibold small">@s.No</td><td class="small">@s.Partner?.Name</td>
+                <td class="small">@s.FromDate.ToString("dd/MM")–@s.ToDate.ToString("dd/MM/yy")</td>
+                <td class="text-end small">@Ui.Money(s.OpeningBalance)</td>
+                <td class="text-end small text-danger">@Ui.Money(s.TotalDebit)</td>
+                <td class="text-end small text-success">@Ui.Money(s.TotalCredit)</td>
+                <td class="text-end fw-semibold">@Ui.Money(s.ClosingBalance)</td>
+                <td><span class="badge bg-@css">@t</span></td>
+            </tr>
+        }
+        @if (Model.Count == 0) { <tr><td colspan="8" class="text-center text-muted py-4">Chưa có bảng đối soát.</td></tr> }
+        </tbody>
+    </table>
+</div></div>

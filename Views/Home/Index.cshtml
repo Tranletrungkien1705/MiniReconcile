@@ -1,0 +1,36 @@
+@{ ViewData["Title"] = "Bảng điều khiển"; var d = (ReconDash)ViewBag.Dash; var ag = d.Aging; }
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">Tổng phải thu</div><div class="stat-num" style="color:#0f766e">@Ui.Money(d.TotalReceivable)</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">Đối tác</div><div class="stat-num">@d.PartnerCount</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">Có nợ quá hạn</div><div class="stat-num text-danger">@d.OverdueCount</div></div></div></div>
+    <div class="col-6 col-lg-3"><div class="card"><div class="card-body"><div class="text-muted small">Đối soát chờ xử lý</div><div class="stat-num text-warning">@d.PendingStatements</div></div></div></div>
+</div>
+<div class="row g-3">
+    <div class="col-lg-7"><div class="card"><div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3"><h6 class="fw-bold mb-0">Phân tích tuổi nợ</h6><a href="/Aging" class="small">Chi tiết →</a></div>
+        @{ var max = new[]{ag.Current,ag.B1_30,ag.B31_60,ag.B61_90,ag.Over90}.Max(); if (max==0) max=1; }
+        @foreach (var b in ag.Buckets())
+        {
+            var pct = (int)(b.Amount * 100 / max);
+            var col = b.Label == "Trong hạn" ? "#0f766e" : b.Label == ">90 ngày" ? "#dc2626" : "#f59e0b";
+            <div class="mb-2"><div class="d-flex justify-content-between small"><span>@b.Label</span><span class="fw-semibold">@Ui.Money(b.Amount)</span></div>
+                <div class="progress" style="height:8px"><div class="progress-bar" style="width:@pct%;background:@col"></div></div></div>
+        }
+        <div class="d-flex justify-content-between mt-3 pt-2 border-top"><span class="fw-bold">Tổng còn nợ</span><span class="fw-bold">@Ui.Money(ag.Total)</span></div>
+    </div></div></div>
+    <div class="col-lg-5"><div class="card"><div class="card-body">
+        <h6 class="fw-bold mb-3">Nợ nhiều nhất</h6>
+        <table class="table table-sm align-middle mb-3">
+            <tbody>
+            @foreach (var b in d.Top)
+            {
+                <tr><td><a href="/Partner/Detail/@b.Partner.Id" class="text-decoration-none">@b.Partner.Name</a><div class="small text-muted">@b.Partner.Code</div></td>
+                    <td class="text-end fw-semibold">@Ui.Money(b.Balance)@if (b.Overdue > 0) { <div class="small text-danger">quá hạn @Ui.Money(b.Overdue)</div> }</td></tr>
+            }
+            @if (d.Top.Count == 0) { <tr><td class="text-muted small">Chưa có công nợ.</td></tr> }
+            </tbody>
+        </table>
+        <a href="/Statement/Create" class="btn btn-primary w-100 mb-2"><i class="bi bi-file-earmark-plus me-1"></i>Lập bảng đối soát</a>
+        <a href="/Partner" class="btn btn-outline-primary w-100">Danh sách đối tác</a>
+    </div></div></div>
+</div>

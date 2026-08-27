@@ -1,0 +1,37 @@
+@model List<PartnerBalance>
+@{ ViewData["Title"] = "Tuổi nợ"; var total = (Aging)ViewBag.Total; }
+<div class="card mb-3"><div class="card-body">
+    <div class="row g-2 text-center">
+        @foreach (var b in total.Buckets())
+        {
+            var col = b.Label == "Trong hạn" ? "#0f766e" : b.Label == ">90 ngày" ? "#dc2626" : "#f59e0b";
+            <div class="col"><div class="text-muted small">@b.Label</div><div class="fw-bold" style="color:@col;font-size:17px">@Ui.Money(b.Amount)</div></div>
+        }
+        <div class="col border-start"><div class="text-muted small">Tổng còn nợ</div><div class="fw-bold" style="font-size:17px">@Ui.Money(total.Total)</div></div>
+    </div>
+</div></div>
+<div class="card"><div class="card-body">
+    <p class="text-muted small mb-2">Tuổi nợ tính theo cấn trừ FIFO: thanh toán được trừ vào các khoản ghi nợ cũ nhất trước, phần chưa trả xếp theo số ngày quá hạn.</p>
+    <table class="table table-hover align-middle">
+        <thead><tr><th>Đối tác</th><th class="text-end">Số dư</th><th class="text-end">Trong hạn</th><th class="text-end">1–30</th><th class="text-end">31–60</th><th class="text-end">61–90</th><th class="text-end">&gt;90</th></tr></thead>
+        <tbody>
+        @foreach (var b in Model.Where(x => x.Balance != 0))
+        {
+            <tr style="cursor:pointer" onclick="location.href='/Partner/Detail/@b.Partner.Id'">
+                <td>@b.Partner.Name<div class="small text-muted">@b.Partner.Code</div></td>
+                <td class="text-end fw-semibold">@Ui.Money(b.Balance)</td>
+                @{ var ag = b.Aging; }
+                <td class="text-end small">@Zero(ag.Current)</td>
+                <td class="text-end small">@Zero(ag.B1_30)</td>
+                <td class="text-end small">@Zero(ag.B31_60)</td>
+                <td class="text-end small">@Zero(ag.B61_90)</td>
+                <td class="text-end small @(ag.Over90>0?"text-danger fw-semibold":"")">@Zero(ag.Over90)</td>
+            </tr>
+        }
+        @if (!Model.Any(x => x.Balance != 0)) { <tr><td colspan="7" class="text-center text-muted py-4">Không có công nợ.</td></tr> }
+        </tbody>
+    </table>
+</div></div>
+@functions {
+    string Zero(decimal v) => v == 0 ? "—" : v.ToString("N0");
+}
