@@ -20,6 +20,7 @@ builder.Services.AddDbContext<AppDbContext>(o =>
 });
 builder.Services.AddScoped<ITenantContext, TenantContext>();
 builder.Services.AddScoped<IReconService, ReconService>();
+builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 builder.Services.AddFleetObs();
 builder.Services.AddControllersWithViews();
 
@@ -28,6 +29,7 @@ using (var scope = app.Services.CreateScope())
     await Seeder.SeedAsync(scope.ServiceProvider.GetRequiredService<AppDbContext>());
 
 app.UseFleetObs();
+app.UseCors();
 
 app.Use(async (ctx, next) =>
 {
@@ -49,6 +51,23 @@ app.MapGet("/api/summary", async (IReconService svc) =>
 {
     var d = await svc.DashboardAsync();
     return Results.Ok(new { receivable = d.TotalReceivable, partners = d.PartnerCount, overdue = d.OverdueCount, pendingStatements = d.PendingStatements });
+});
+
+// API công khai: cổng đại lý (iDealer) tra công nợ + tuổi nợ theo mã đại lý.
+app.MapGet("/api/partner-balance", async (string code, IReconService svc, AppDbContext db) =>
+{
+    var p = await db.Partners.IgnoreQueryFilters().FirstOrDefaultAsync(x => x.Code == code.Trim());
+    if (p == null) return Results.NotFound(new { code, found = false });
+    var bal = await svc.BalanceOfAsync(p.Id);
+    var aging = await svc.AgingForAsync(p.Id, DateTime.Today);
+    var entries = await db.Ledger.IgnoreQueryFilters().Where(e => e.PartnerId == p.Id)
+        .OrderByDescending(e => e.EntryDate).Take(10).ToListAsync();
+    return Results.Ok(new
+    {
+        found = true, p.Code, p.Name, balance = bal, overdue = aging.Over90 + aging.B61_90 + aging.B31_60,
+        aging = new { current = aging.Current, d1_30 = aging.B1_30, d31_60 = aging.B31_60, d61_90 = aging.B61_90, over90 = aging.Over90 },
+        recent = entries.Select(e => new { date = e.EntryDate.ToString("yyyy-MM-dd"), e.DocNo, type = e.Type == LedgerType.Debit ? "Nợ" : "Có", e.Amount, e.Note })
+    });
 });
 
 // API tích hợp: hệ bán hàng (MiniDMS...) đẩy công nợ vào sổ đối soát tự động.
