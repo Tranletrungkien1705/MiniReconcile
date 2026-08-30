@@ -51,6 +51,28 @@ app.MapGet("/api/summary", async (IReconService svc) =>
     return Results.Ok(new { receivable = d.TotalReceivable, partners = d.PartnerCount, overdue = d.OverdueCount, pendingStatements = d.PendingStatements });
 });
 
+// API tích hợp: hệ bán hàng (MiniDMS...) đẩy công nợ vào sổ đối soát tự động.
+// type: 0 = ghi nợ (đại lý nợ tiền hàng), 1 = ghi có (đại lý thanh toán).
+app.MapPost("/api/ext/ledger", async (ExtLedgerDto dto, IReconService svc, AppDbContext db) =>
+{
+    if (string.IsNullOrWhiteSpace(dto.PartnerCode)) return Results.BadRequest(new { error = "Cần PartnerCode." });
+    if (dto.Amount <= 0) return Results.BadRequest(new { error = "Số tiền phải > 0." });
+    var p = await db.Partners.FirstOrDefaultAsync(x => x.Code == dto.PartnerCode);
+    if (p == null)
+    {
+        await svc.CreatePartnerAsync(new Partner { Code = dto.PartnerCode.Trim(), Name = dto.PartnerName ?? dto.PartnerCode.Trim() });
+        p = await db.Partners.FirstOrDefaultAsync(x => x.Code == dto.PartnerCode);
+    }
+    var date = DateTime.TryParse(dto.Date, out var dt) ? dt : DateTime.Today;
+    var (ok, msg) = await svc.AddEntryAsync(new LedgerEntry
+    {
+        PartnerId = p!.Id, Type = (LedgerType)dto.Type, Amount = dto.Amount, DocNo = dto.RefNo ?? "",
+        EntryDate = date, DueDate = dto.Type == 0 ? date.AddDays(30) : null, Note = dto.Note
+    });
+    var bal = await svc.BalanceOfAsync(p.Id);
+    return ok ? Results.Ok(new { ok, msg, partnerCode = p.Code, balance = bal }) : Results.BadRequest(new { ok, error = msg });
+});
+
 app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name)) return Results.BadRequest(new { error = "Cần Name." });
@@ -63,3 +85,4 @@ app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Inde
 app.Run();
 
 record RegisterOrgDto(string Name);
+record ExtLedgerDto(string PartnerCode, string? PartnerName, int Type, decimal Amount, string? RefNo, string? Date, string? Note);
