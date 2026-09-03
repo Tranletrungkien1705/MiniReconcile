@@ -129,8 +129,59 @@ app.MapPost("/api/orgs/register", async (RegisterOrgDto dto, AppDbContext db) =>
     return Results.Ok(new { orgId = org.Id, apiKey = org.ApiKey });
 });
 
+// Import đối tác thật từ Mst_Dealer (dedupe theo Code)
+app.MapPost("/api/import/partners", async (List<ImportPartnerDto> rows, AppDbContext db, ITenantContext tc) =>
+{
+    if (rows == null || rows.Count == 0) return Results.BadRequest(new { error = "Không có dữ liệu." });
+    int added = 0, skipped = 0;
+    var orgId = tc.OrgId;
+    var existCodes = db.Partners.Where(p => p.OrgId == orgId).Select(p => p.Code).ToHashSet();
+    foreach (var row in rows)
+    {
+        if (string.IsNullOrWhiteSpace(row.Code)) { skipped++; continue; }
+        if (existCodes.Contains(row.Code.Trim())) { skipped++; continue; }
+        db.Partners.Add(new Partner
+        {
+            OrgId = orgId, Code = row.Code.Trim(), Name = row.Name?.Trim() ?? row.Code.Trim(),
+            Phone = row.Phone, Email = row.Email, OpeningBalance = row.OpeningBalance
+        });
+        existCodes.Add(row.Code.Trim()); added++;
+    }
+    await db.SaveChangesAsync();
+    return Results.Ok(new { added, skipped, total = added + skipped });
+});
+
+// Import bút toán công nợ thật từ Pmt_Payment (dedupe theo DocNo)
+app.MapPost("/api/import/ledger", async (List<ImportLedgerDto> rows, AppDbContext db, ITenantContext tc) =>
+{
+    if (rows == null || rows.Count == 0) return Results.BadRequest(new { error = "Không có dữ liệu." });
+    int added = 0, skipped = 0;
+    var orgId = tc.OrgId;
+    var existDocs = db.Ledger.Where(e => e.OrgId == orgId).Select(e => e.DocNo).ToHashSet();
+    foreach (var row in rows)
+    {
+        if (string.IsNullOrWhiteSpace(row.DocNo) || string.IsNullOrWhiteSpace(row.PartnerCode)) { skipped++; continue; }
+        if (existDocs.Contains(row.DocNo.Trim())) { skipped++; continue; }
+        var partner = db.Partners.FirstOrDefault(p => p.OrgId == orgId && p.Code == row.PartnerCode.Trim());
+        if (partner == null) { skipped++; continue; }
+        var entryDate = row.EntryDate ?? DateTime.Today;
+        db.Ledger.Add(new LedgerEntry
+        {
+            OrgId = orgId, PartnerId = partner.Id, DocNo = row.DocNo.Trim(),
+            Type = row.IsCredit ? LedgerType.Credit : LedgerType.Debit,
+            Amount = row.Amount, EntryDate = entryDate,
+            DueDate = row.IsCredit ? null : entryDate.AddDays(30), Note = row.Note
+        });
+        existDocs.Add(row.DocNo.Trim()); added++;
+    }
+    await db.SaveChangesAsync();
+    return Results.Ok(new { added, skipped, total = added + skipped });
+});
+
 app.MapControllerRoute(name: "default", pattern: "{controller=Home}/{action=Index}/{id?}");
 app.Run();
 
 record RegisterOrgDto(string Name);
 record ExtLedgerDto(string PartnerCode, string? PartnerName, int Type, decimal Amount, string? RefNo, string? Date, string? Note);
+record ImportPartnerDto(string? Code, string? Name, string? Phone, string? Email, decimal OpeningBalance);
+record ImportLedgerDto(string? DocNo, string? PartnerCode, bool IsCredit, decimal Amount, DateTime? EntryDate, string? Note);
